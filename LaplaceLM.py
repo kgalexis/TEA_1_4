@@ -1,6 +1,5 @@
 import re
 from nltk import sent_tokenize, ngrams
-from operator import itemgetter
 from math import log
 
 
