@@ -11,7 +11,8 @@ class LaplaceLM:
         self.corpus = self.preprocess(self._read_corpus_file(corpus_file))
         bag = self.train()
         #self.test(bag)
-        self.score(bag)
+        #self.score(bag)
+        self.predict(["Of the", "I would like to"], bag)
         #self.print_bag(bag)
         
         
@@ -28,7 +29,8 @@ class LaplaceLM:
                 start = ""
                 for i in range(self.n-1):
                     start+= "$START{}$ ".format(i+1)
-                sent= start+ sent+ (self.n>1)*" $END$"             
+                sent= start+ sent+ " $END$"
+                #sent= start+ sent+ (self.n>1)*" $END$"
                 corpus+= [sent]
         corpus = " ".join(corpus)  
         return corpus        
@@ -86,7 +88,25 @@ class LaplaceLM:
                 entropy+=log(p)
                 N+= 1
         entropy= -entropy/N        
-        print("Entropy is {}\n".format(entropy))              
+        print("Entropy is {}\n".format(entropy))    
+
+    def predict(self, preds, bag, ret=5):
+        #test = ["he please god football", "he plays god football", "he plays good football", "he players good football", "he pleases god ball", "of the rules"]
+        for seq in preds:
+            voc = []
+            seq = self.preprocess([seq])
+            print(seq)
+            print("\t{}-grams:".format(self.n))
+    
+            for word in bag.keys():
+                nseq = re.sub("\$END\$", word, seq)
+                nseq = (nseq.split())[-self.n:]
+                p = self.prob(nseq, smoothing=1, voc=len(bag.keys())) *100
+                voc+= [(" ".join(nseq),p)]
+            voc = sorted(voc, key= lambda tup: tup[1])
+            for (word,p) in voc[-ret:]:
+                print("\t\t{}: {:4.2f}%".format(word,p))
+          
 
 for n in range(1,5):        
     lm = LaplaceLM("C:/Users/zeus8/Desktop/europarl-v7.el-en.en",n)        
