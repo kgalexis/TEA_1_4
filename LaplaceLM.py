@@ -1,18 +1,21 @@
 import re
 from nltk import sent_tokenize, ngrams
 from math import log
-
+import random
 
 class LaplaceLM:
 
-    def __init__(self, corpus_file, n=1, lim=4000, unknown_threshold=10):
+    def __init__(self, corpus_file, n=1, start=0, end=4000, unknown_threshold=10):
         self.n = n
-        self.corpus = self._preprocess(self._read_corpus_file(corpus_file, lim))
-        self.vocabulary = self._train(unknown_threshold)
+        self.corpus = self._preprocess(self._read_corpus_file(corpus_file, start, end))
+        self.train_vocabulary = self._train(self.corpus,unknown_threshold)
+        self.test_dataset = self._preprocess(self._read_corpus_file(corpus_file, 4000, 6000))
+        self.test_vocabulary = self._train(self.test_dataset,unknown_threshold)
+        self.test_sentences = self._test_sentences_splitting(self._read_corpus_file(corpus_file, 4000, 6000))
 
-    def _read_corpus_file(self, path, lim):  
+    def _read_corpus_file(self, path, start, end):  
         file = open(path, 'r', encoding="utf8")
-        content = list(file)[:lim]
+        content = list(file)[start:end]
         file.close()
         return content
 
@@ -28,18 +31,41 @@ class LaplaceLM:
                 sent = start + sent + ' *END*'
                 corpus += [sent]
         corpus = ' '.join(corpus)
-        return corpus        
+        return corpus   
 
-    def _train(self, threshold):
-        distinct_words = set(self.corpus.split())
-        vocabulary = [word if self.corpus.count(word) > threshold else '*UNK*' for word in distinct_words]
+    def _test_sentences_splitting(self, raw_corpus):
+        corpus = []
+        for line in raw_corpus:
+            sentences = sent_tokenize(line)
+            for sent in sentences:
+                sent = re.sub(r'[.,\/#?!$%\^&\*;:{}=\-_`~()\'\"\n]', '', sent.lower())
+                corpus += [sent]
+        return corpus       
+
+    def _train(self, dataset, threshold):
+        distinct_words = set(dataset.split())
+        vocabulary = [word if dataset.count(word) > threshold else '*UNK*' for word in distinct_words]
         return set(vocabulary)
 
     def _get_probability(self, n_gram):
         c1 = self.corpus.count(' '.join(n_gram))
         c2 = self.corpus.count(' '.join(n_gram[:len(n_gram)-1]))
-        return (c1 + 1) / (c2 + len(self.vocabulary))
-
+        return (c1 + 1) / (c2 + len(self.train_vocabulary))
+    
+    def get_test_sentence(self):
+        return self.test_sentences[random.randint(0, len(self.test_sentences))]
+    
+    def create_random_sentence(self, length):
+        clean_vocabulary = self.test_vocabulary
+        vocabulary_words = list(self.test_vocabulary)
+        r = re.compile("[*]")
+        unwanted_words = list(filter(r.match, vocabulary_words)) 
+        for i in unwanted_words:
+            clean_vocabulary.remove(i)
+        words = random.sample(self.test_vocabulary,length)
+        sentence = ' '.join(words)
+        return sentence 
+        
     def test(self, sequence):
         print(sequence)
         sequence = self._preprocess([sequence])
@@ -51,8 +77,9 @@ class LaplaceLM:
             print("\t\t", n_gram, prob)
         print("\tProbability is {}\n".format(sum)) 
 
-    def entropy(self, sequences):
+    def eval_measures(self, sequences):
         entropy = 0
+        perplexity = 0
         N = 0
         for seq in sequences:
             seq = self._preprocess([seq])
@@ -61,14 +88,16 @@ class LaplaceLM:
                 entropy += log(prob)
                 N += 1
         entropy = -entropy/N
-        print("Entropy is {}\n".format(entropy))    
+        perplexity = 2**entropy
+        print("Entropy is {}\n".format(entropy))   
+        print("Perplexity is {}\n".format(perplexity))  
 
     def predict(self, sequence, results=5):
         print(sequence)
         candidates = []
         sequence = self._preprocess([sequence])
         print("\t{}-grams:".format(self.n))
-        for word in self.vocabulary:
+        for word in self.train_vocabulary:
             seq = re.sub("\*END\*", word, sequence)
             seq = (seq.split())[-self.n:]
             prob = self._get_probability(seq) * 100
@@ -80,14 +109,20 @@ class LaplaceLM:
 
 
 for n in range(2,5):
-    lm = LaplaceLM("/home/kostas/Desktop/Semester 2/text engineering analytics/assignments/el-en/europarl-v7.el-en.en",n)
-    test_sequences = ["He please god football.", "He plays god football.", "He plays good football.", "He players good football.", "He pleases god ball.", "Of the rules.", "Rules the of."]
+    lm = LaplaceLM("C:\europarl\europarl-v7.el-en.en",n)
+    test_sequences = []
+    test_set_sentence = lm.get_test_sentence()
+    test_sequences.append(test_set_sentence)
+    for i in range(0,4):
+        test_sequences.append(lm.create_random_sentence(len(test_set_sentence.split())))
+    #test_sequences = ["He please god football.", "He plays god football.", "He plays good football.", "He players good football.", "He pleases god ball.", "Of the rules.", "Rules the of."]
     predict_sequences = ["Of the", "I would like to"]
 
-#     for test_sequence in test_sequences:
-#         lm.test(test_sequence)
+    for test_sequence in test_sequences:
+        lm.test(test_sequence)
+    
+    
+    lm.eval_measures(test_sequences)
 
-#     lm.entropy(test_sequences)
-
-    for predict_sequence in predict_sequences:
-        lm.predict(predict_sequence)
+#    for predict_sequence in predict_sequences:
+#        lm.predict(predict_sequence)
