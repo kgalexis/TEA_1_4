@@ -121,7 +121,7 @@ for n in range(2,5):
         lm.test(test_sequence)
     
     
-    lm.eval_measures(test_sequences)
+    #lm.eval_measures(lm.test_sentences)
 
     for predict_sequence in predict_sequences:
         lm.predict(predict_sequence)
