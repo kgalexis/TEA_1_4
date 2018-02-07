@@ -1,100 +1,80 @@
 import re
-from nltk import sent_tokenize, ngrams
-from math import log
 import random
+from nltk import ngrams
+from math import log2
 
 class LaplaceLM:
 
-    def __init__(self, corpus, n=1, threshold=5):
+    def __init__(self, corpus, n, threshold=5):
         self.n = n
         self.threshold = threshold
-        self.vocabulary = []
-        self.corpus = self._preprocess(corpus)
-        self.vocabulary = self._train(self.corpus)
+        self.vocabulary = self._train(corpus)
+
+    def _strip(self, text):
+        text = re.sub(r'[.,\/#?!$%\^&\*;:{}\[\]=\-_`~()\'\"\n]', ' ', text.lower())
+        return re.sub(' +', ' ', text)
+
+    def _add_tokens(self, sequence):
+        start = ''
+        for i in range(self.n-1):
+            start += '*START{}* '.format(i+1)
+        new_sequence = start + sequence + ' *END*'
+        return re.sub(' +', ' ', new_sequence)
+
+    def _add_unk(self, text, mode):
+        distinct_words = set(text.split())
+        if mode==0:
+            oov_words = [word for word in distinct_words if text.count(' ' + word + ' ') < self.threshold]
+        else:
+            oov_words = [word for word in distinct_words if word not in self.vocabulary]
+        for word in oov_words:
+            text = text.replace(' ' + word + ' ', ' *UNK* ')
+        text = re.sub(' +', ' ', text)
+        return text
+
+    def _train(self, corpus):
+        self.train_corpus = [self._strip(sentence) for sentence in corpus]
+        self.train_corpus = [self._add_tokens(sentence) for sentence in self.train_corpus]
+        self.train_corpus = ' '.join(self.train_corpus)
+        self.train_corpus = self._add_unk(self.train_corpus, 0)
+        return set(self.train_corpus.split())
+
+    def _get_probability(self, n_gram):
+        c1 = self.train_corpus.count(' ' + ' '.join(n_gram) + ' ')
+        c2 = self.train_corpus.count(' ' + ' '.join(n_gram[:len(n_gram)-1]) + ' ')
+        return (c1 + 1) / (c2 + len(self.vocabulary))
 
     def _get_special_tokens(self):
-        special_tokens = []
-        for i in range(self.n-1):
-            special_tokens.append('*START{}*'.format(i+1))
+        special_tokens = ['*START{}*'.format(i+1) for i in range(self.n-1)]
         special_tokens.append('*END*')
         special_tokens.append('*UNK*')
         return special_tokens
 
-    def _clear_sentence(self, sentence):
-        return re.sub(r'[.,\/#?!$%\^&\*;:{}=\-_`~()\'\"\n]', '', sentence.lower())
+    def get_random_sentence(self, corpus):
+        return random.choice(corpus)
 
-    def _add_tokens(self, sentence):
-        start = ''
-        for i in range(self.n-1):
-            start += '*START{}* '.format(i+1)
-        return start + sentence + ' *END*'
+    def generate_test_sequences(self, length, n_sequences=3):
+        sequences = []
+        for i in range(n_sequences):
+            words = random.sample(self.vocabulary - set(self._get_special_tokens()), length)
+            sequence = ' '.join(words)
+            sequences.append(sequence)
+        return sequences
 
-    def _preprocess(self, raw_corpus):
-        corpus = []
-        for line in raw_corpus:
-            sentences = sent_tokenize(line)
-            for sent in sentences:
-                sent = self._clear_sentence(sent)
-                sent = self._add_tokens(sent)
-                corpus += [sent]
-        corpus = ' '.join(corpus)
-        distinct_words = set(corpus.split())
-        if(self.vocabulary):
-            oov_words = [word for word in distinct_words if word not in self.vocabulary]
-        else:
-            oov_words = [word for word in distinct_words if corpus.count(' ' + word + ' ') < self.threshold]
-        for word in oov_words:
-            corpus = corpus.replace(' ' + word + ' ', ' *UNK* ')
-        corpus = re.sub(' +', ' ', corpus)
-        return corpus
-
-    def _train(self, corpus):
-        distinct_words = set(corpus.split())
-        oov_words = [word for word in distinct_words if corpus.count(' ' + word + ' ') < self.threshold]
-        return [word for word in distinct_words if word not in oov_words]
-
-    def _get_probability(self, n_gram):
-        c1 = self.corpus.count(' '.join(n_gram) + ' ')
-        c2 = self.corpus.count(' '.join(n_gram[:len(n_gram)-1]) + ' ')
-        return (c1 + 1) / (c2 + len(self.vocabulary))
-
-    def _get_random_sentence(self, corpus):
-        k = random.randint(0, corpus.count('*START1*')-1)
-        pattern = re.compile('\*START1\*.*?\*END\*')
-        return re.findall(pattern, corpus)[k]
-
-    def _generate_random_sentence(self, length):
-        words = random.sample(self.vocabulary, length)
-        sentence = ' '.join(words)
-        start = ''
-        for i in range(self.n-1):
-            start += '*START{}* '.format(i+1)
-        sentence = start + sentence + ' *END*'
-        return sentence
-
-    def test(self, corpus):
-        test_sequences = []
-        test_corpus = self._preprocess(corpus)
-        correct_sentence = self._get_random_sentence(test_corpus)
-        test_sequences += [correct_sentence]
-        for i in range(3):
-            test_sequences += [self._generate_random_sentence(len(correct_sentence.split())-self.n)]
-        for seq in test_sequences:
-            print(seq)
-            print("\t{}-grams:".format(self.n))
-            sum = 0
-            for n_gram in ngrams(seq.split(' '), self.n):
-                prob = self._get_probability(n_gram)
-                sum += log(prob)
-                print("\t\t", n_gram, prob)
-            print("\tProbability is {}\n".format(sum))
+    def test(self, sequence):
+        sequence = self._strip(sequence)
+        sequence = self._add_tokens(sequence)
+        sequence = self._add_unk(sequence, 1)
+        prob_sum = 0
+        for n_gram in ngrams(sequence.split(' '), self.n):
+            prob = self._get_probability(n_gram)
+            prob_sum += log2(prob)
+        return prob_sum
 
     def predict(self, sequence, results=5):
-        print(sequence)
         candidates = []
-        sequence = self._clear_sentence(sequence)
+        sequence = self._strip(sequence)
         sequence = self._add_tokens(sequence)
-        print("\t{}-grams:".format(self.n))
         for word in self.vocabulary:
             if word in self._get_special_tokens():
                 continue
@@ -104,21 +84,15 @@ class LaplaceLM:
             candidates += [(word, prob)]
         candidates = sorted(candidates, key= lambda tup: tup[1])
         for (word, prob) in candidates[-results:]:
-            print("\t\t{}: {:4.2f}%".format(word, prob))
+            print("\t{}: {:4.2f}%".format(word, prob))
+        return
 
-    def eval_measures(self, corpus):
+    def evaluate(self, corpus):
         entropy = 0
-        perplexity = 0
         N = 0
-        test_sequences = []
-        test_corpus = self._preprocess(corpus)
-        test_sequences = [e+'*END*' for e in test_corpus.split('*END*') if e]
-        for seq in test_sequences:
-            seq = re.sub(' \*START1\*', '*START1*', seq)
-            for n_gram in ngrams(seq.split(' '), self.n):
-                prob = self._get_probability(n_gram)
-                entropy += log(prob)
-                N += 1
+        for sentence in corpus:
+            entropy += self.test(sentence)
+            N += len(sentence.split())
         entropy = -entropy/N
         perplexity = 2**entropy
         print("Entropy is {}".format(entropy))   
