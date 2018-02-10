@@ -1,16 +1,17 @@
 from LaplaceLM import LaplaceLM
+from KNLM import KNLM
 from InterpolatedLM import InterpolatedLM
 import numpy as np
 
 def read_file(path, start, end):
-    with open(path, 'r') as file:
+    with open(path, 'r', encoding="utf-8") as file:
         return list(file)[start:end]
 
 filepath = '/home/kostas/Desktop/Semester 2/text engineering analytics/assignments/assignment1/el-en/europarl-v7.el-en.en'
 train_set = read_file(filepath, 0, 3000)
 test_set = read_file(filepath, 3000, 4000)
 
-print('\n========== Bigram Language Model ==========')
+print('\n========== Bigram Language Model (Laplace) ==========')
 bigram_lm = LaplaceLM(train_set, 2, 5)
 
 correct_sentence = bigram_lm.get_random_sentence(test_set)
@@ -26,7 +27,7 @@ for predict_sequence in predict_sequences:
 
 bigram_lm.evaluate(test_set)
 
-print('\n========== Trigram Language Model ==========')
+print('\n========== Trigram Language Model (Laplace) ==========')
 trigram_lm = LaplaceLM(train_set, 3, 5)
 
 print("{}\n---Log-probability: {}\n".format(correct_sentence, trigram_lm.test(correct_sentence)))
@@ -38,6 +39,20 @@ for predict_sequence in predict_sequences:
     trigram_lm.predict(predict_sequence)
 
 trigram_lm.evaluate(test_set)
+
+print('\n========== Bigram Language Model (KN) ==========')
+bigram_lm = KNLM(train_set, 2, 5)
+
+print("{}\n---Log-probability: {}\n".format(correct_sentence, bigram_lm.test(correct_sentence)))
+for test_sequence in test_sequences:
+    print("{}\n\n---Log-probability: {}\n".format(test_sequence, bigram_lm.test(test_sequence)))
+'''
+for predict_sequence in predict_sequences:
+    print(predict_sequence)
+    bigram_lm.predict(predict_sequence)
+
+bigram_lm.evaluate(test_set)
+'''
 
 print('\n========== Interpolated Language Model ==========')
 for l in np.linspace(0, 1, 6):
